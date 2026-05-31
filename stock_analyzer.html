@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>财报分析系统 v4.0</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0A0F14;color:#d1d5db;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#1E2B31;border-radius:2px}
+input:focus,button:focus{outline:none}
+@keyframes spin{to{transform:rotate(360deg)}}.animate-spin{animation:spin 1s linear infinite}
+@keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.slide-in{animation:slideIn .3s ease-out}
+.sidebar{width:220px;min-width:220px;height:calc(100vh-64px);overflow-y:auto;position:fixed;top:64px;left:0;background:#0D1317;border-right:1px solid #1E2B31}
+.main-area{margin-left:220px;min-height:calc(100vh-64px);padding:24px;margin-top:64px}
+</style>
+</head>
+<body><div id="root"></div>
+<script>
+(function(){
+var e=React.createElement;
+var useState=React.useState,useEffect=React.useEffect,useRef=React.useRef;
+var API=window.location.origin;
+var CATS=[{n:"Tech",i:"🖥",s:"AAPL,MSFT,GOOGL,META,AMZN,NFLX,CRM,ADBE,ORCL,NOW,PLTR,SNOW,CRWD,DDOG,NET,ZS,PANW,FTNT,TEAM,WDAY"},{n:"Semi",i:"💾",s:"NVDA,AMD,INTC,AVGO,QCOM,TXN,MU,ARM,AMAT,LRCX,KLAC,MRVL,ON,MPWR,ADI"},{n:"EV/Energy",i:"⚡",s:"TSLA,RIVN,LCID,NIO,XPEV,F,GM,XOM,CVX,CAT,GE,RTX,LMT,BA,DE"},{n:"Finance",i:"🏦",s:"JPM,BAC,V,MA,GS,BLK,MS,C,WFC,AXP,SCHW,SPGI,MCO,PYPL,SQ"},{n:"Consumer",i:"🛒",s:"WMT,COST,HD,NKE,SBUX,MCD,DIS,TGT,LOW,TJX,LULU,ABNB,UBER,LYFT"},{n:"Pharma",i:"💊",s:"JNJ,PFE,UNH,LLY,ABBV,MRK,BMY,AMGN,GILD,REGN,ISRG,VRTX,MRNA,BIIB,DXCM"},{n:"China ADR",i:"🇨🇳",s:"BABA,JD,PDD,BIDU,NIO,BILI,TAL,EDU,TME,NTES"},{n:"HK Stocks",i:"🇭🇰",s:"0700.HK,9988.HK,3690.HK,1810.HK,1211.HK,2318.HK,0388.HK,1299.HK,0005.HK,0939.HK,1398.HK,0883.HK,0941.HK,2269.HK,2020.HK"}].map(function(c){c.s=c.s.split(",");return c});
+var fmtPrice=function(v){if(v==null)return"--";var n=Number(v);if(isNaN(n))return"--";if(n>=1000)return n.toFixed(0);return n>=1?n.toFixed(2):n.toFixed(4)};
+var fmtFin=function(v){var s=String(v).replace(/,/g,"").replace(/\s/g,"");if(s==="--"||s==="-"||s===""||s==="N/A")return"--";var n=parseFloat(s);if(isNaN(n))return v;if(Math.abs(n)>=1e12)return(n/1e12).toFixed(2)+"T";if(Math.abs(n)>=1e9)return(n/1e9).toFixed(2)+"B";if(Math.abs(n)>=1e6)return(n/1e6).toFixed(2)+"M";if(Math.abs(n)>=1e3)return(n/1e3).toFixed(2)+"K";return n.toFixed(2)};
+var sc=function(k){return k<0?"#ef4444":k>0?"#10b981":"#9ca3af"};
+var scoreColor=function(s){var m={4:"#ef4444",8:"#f97316",12:"#eab308",16:"#3b82f6",20:"#10b981"};return m[Math.ceil(s/4)*4]||"#6b7280"};
+var ratingGrad=function(r){var m={STRONG_BUY:["#10b981","#14b8a6"],BUY:["#3b82f6","#06b6d4"],HOLD:["#f59e0b","#f97316"],CAUTION:["#f97316","#ef4444"],AVOID:["#ef4444","#dc2626"]};return m[r]||["#6b7280","#4b5563"]};
+function scrapeTbl(html){var d={},doc=new DOMParser().parseFromString(html,"text/html");doc.querySelectorAll("table tr").forEach(function(r){var c=r.querySelectorAll("td");if(c.length>=2){var l=c[0].textContent.trim(),v=c[1].textContent.trim();if(l&&v)d[l]=v}});return d}
+function scrapeStmt(html){var doc=new DOMParser().parseFromString(html,"text/html"),rows=[];doc.querySelectorAll('[class*="row lv-"]').forEach(function(r){var t=r.querySelector('[class*="rowTitle"]');if(!t)return;var tt=t.textContent.trim(),vs=[];r.querySelectorAll(':scope>[class*="column"]:not([class*="sticky"])').forEach(function(c){var v=c.textContent.trim();if(v&&v!==tt)vs.push(v)});if(tt&&vs.length)rows.push({title:tt,values:vs})});if(!rows.length){doc.querySelectorAll("table tbody tr").forEach(function(r){var c=r.querySelectorAll("td,th");if(c.length<2)return;var tt=c[0].textContent.trim(),vs=[];for(var i=1;i<c.length;i++)vs.push(c[i].textContent.trim()||"--");if(tt&&vs.length)rows.push({title:tt,values:vs})})}return rows}
+function extractStats(raw,sym){var g=function(k){return raw[k]||""};return{symbol:sym.toUpperCase(),name:sym.toUpperCase(),marketCap:g("Market Cap"),trailingPE:g("Trailing P/E"),forwardPE:g("Forward P/E"),pegRatio:g("PEG Ratio (5yr expected)"),eps:g("Diluted EPS  (ttm)"),profitMargin:g("Profit Margin"),operatingMargin:g("Operating Margin  (ttm)"),roe:g("Return on Equity  (ttm)"),roa:g("Return on Assets  (ttm)"),revGrowth:g("Quarterly Revenue Growth  (yoy)"),earnGrowth:g("Quarterly Earnings Growth  (yoy)"),beta:g("Beta (5Y Monthly)"),high52w:g("52 Week High 3"),low52w:g("52 Week Low 3"),revenue:g("Revenue  (ttm)"),ebitda:g("EBITDA"),currentRatio:g("Current Ratio  (mrq)"),debtEquity:g("Total Debt/Equity  (mrq)"),bookValue:g("Book Value Per Share  (mrq)"),totalCash:g("Total Cash  (mrq)"),totalDebt:g("Total Debt  (mrq)"),operatingCF:g("Operating Cash Flow  (ttm)"),freeCF:g("Levered Free Cash Flow  (ttm)"),grossProfit:g("Gross Profit  (ttm)")}}
+function App(){
+  var _a=useState(null),sel=_a[0],setSel=_a[1],_b=useState({}),quotes=_b[0],setQuotes=_b[1];
+  var _c=useState(null),chart=_c[0],setChart=_c[1],_d=useState(null),co=_d[0],setCo=_d[1];
+  var _e=useState(null),pred=_e[0],setPred=_e[1],_f=useState(false),load=_f[0],setLoad=_f[1];
+  var _g=useState(""),err=_g[0],setErr=_g[1],_h=useState("valuation"),mtab=_h[0],setMtab=_h[1];
+  var _i=useState("income"),ftab=_i[0],setFtab=_i[1],_j=useState(null),inc=_j[0],setInc=_j[1];
+  var _k=useState(null),bal=_k[0],setBal=_k[1],_l=useState(null),cf=_l[0],setCf=_l[1];
+  var _m=useState(""),sq=_m[0],setSq=_m[1];
+  useEffect(function(){
+    var all=CATS.reduce(function(a,c){return a.concat(c.s)},[]);
+    fetch(API+"/api/quotes?symbols="+encodeURIComponent(all.join(","))).then(function(r){return r.json()}).then(function(d){
+      var m={};if(d.data)d.data.forEach(function(x){if(x.price!=null)m[x.symbol]=x});setQuotes(m);
+    }).catch(function(){});
+  },[]);
+  var select=function(sym){
+    setSel(sym);setLoad(true);setErr("");setChart(null);
+    setCo(null);setPred(null);setInc(null);setBal(null);setCf(null);
+    var chartP=fetch(API+"/api/chart/"+sym).then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.json()}).then(function(d){return d.data}).catch(function(e){return null});
+    var statsP=fetch(API+"/api/proxy?url="+encodeURIComponent("https://finance.yahoo.com/quote/"+sym+"/key-statistics/")).then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text()});
+    var incP=fetch(API+"/api/proxy?url="+encodeURIComponent("https://finance.yahoo.com/quote/"+sym+"/financials/")).then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text()});
+    var balP=fetch(API+"/api/proxy?url="+encodeURIComponent("https://finance.yahoo.com/quote/"+sym+"/balance-sheet/")).then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text()});
+    var cfP=fetch(API+"/api/proxy?url="+encodeURIComponent("https://finance.yahoo.com/quote/"+sym+"/cash-flow/")).then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text()});
+    Promise.all([chartP,statsP,incP,balP,cfP]).then(function(results){
+      var cd=results[0],sh=results[1],ih=results[2],bh=results[3],ch=results[4];
+      if(cd)setChart(cd);
+      var data=extractStats(scrapeTbl(sh),sym);
+      setCo(data);
+      setInc(scrapeStmt(ih));setBal(scrapeStmt(bh));setCf(scrapeStmt(ch));
+      return fetch(API+"/api/score",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+    }).then(function(r){return r.json()}).then(function(res){
+      if(res.status==="success")setPred(res.data.prediction);
+      else setErr(res.detail||"score failed");
+      setLoad(false);
+    }).catch(function(e){setErr(e.message||"load failed");setLoad(false)});
+  };
+  var goHome=function(){setSel(null);setCo(null);setPred(null);setChart(null);setErr("")};
+  return e("div",null,
+    e("header",{style:{background:"#0E1518",borderBottom:"1px solid #1E2B31",height:64,display:"flex",alignItems:"center",padding:"0 20px",position:"fixed",top:0,left:0,right:0,zIndex:50}},
+      e("span",{style:{fontSize:20,cursor:"pointer",marginRight:12},onClick:goHome},"📊"),
+      e("span",{style:{fontSize:18,fontWeight:900,color:"#f3f4f6"}},"Stock Analyzer"),
+      e("span",{style:{fontSize:12,color:"#10b981",fontWeight:700,border:"1px solid rgba(16,185,129,0.2)",borderRadius:8,padding:"2px 8px",marginLeft:8}},"v4.0"),
+      e("div",{style:{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}},
+        e("input",{type:"text",value:sq,onChange:function(ev){setSq(ev.target.value)},onKeyDown:function(ev){if(ev.key==="Enter")select(sq)},
+          placeholder:"Symbol...",style:{background:"#0B1113",border:"1px solid #1E2B31",borderRadius:10,padding:"8px 16px",fontSize:13,color:"#d1d5db",width:180}})
+      )
+    ),
+    e("div",{className:"sidebar"},
+      CATS.map(function(cat){return e(SidebarGroup,{key:cat.n,cat:cat,quotes:quotes,selected:sel,onSelect:select})})
+    ),
+    e("div",{className:"main-area"},
+      !sel&&e(Welcome),
+      load&&e("div",{style:{display:"flex",justifyContent:"center",padding:80}},
+        e("div",null,
+          e("div",{className:"animate-spin",style:{width:32,height:32,border:"2px solid #3b82f6",borderTopColor:"transparent",borderRadius:"50%",margin:"0 auto 16"}}),
+          e("p",{style:{color:"#9ca3af",textAlign:"center"}},"Loading...")
+        )
+      ),
+      err&&e("div",{style:{background:"#111820",border:"1px solid #1E2B31",borderRadius:16,padding:48,textAlign:"center"}},
+        e("p",{style:{color:"#ef4444",marginBottom:16}},"Error: "+err),
+        e("button",{onClick:function(){setErr("")},style:{color:"#3b82f6",border:"none",background:"none",cursor:"pointer"}},"Dismiss")
+      ),
+      co&&pred&&!load&&e(Detail,{co:co,pred:pred,cd:chart,mtab:mtab,setMtab:setMtab,ftab:ftab,setFtab:setFtab,inc:inc,bal:bal,cf:cf,goHome:goHome})
+    )
+  );
+}
+function SidebarGroup(p){var cat=p.cat,quotes=p.quotes,selected=p.selected,onSelect=p.onSelect;
+  var _b=useState(true),open=_b[0],setOpen=_b[1];
+  return e("div",null,
+    e("div",{onClick:function(){setOpen(!open)},style:{display:"flex",alignItems:"center",padding:"8px 16px",cursor:"pointer",color:"#9ca3af",fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:1,userSelect:"none"}},
+      e("span",{style:{marginRight:6,fontSize:10,transition:"transform .2s",transform:open?"rotate(90deg)":"rotate(0deg)"}},"▶"),
+      e("span",null,cat.i+" "+cat.n),e("span",{style:{marginLeft:"auto",fontSize:10,color:"#4b5563"}},cat.s.length)
+    ),
+    open&&e("div",null,cat.s.map(function(s){
+      var q=quotes[s],isSel=selected===s;
+      return e("div",{key:s,onClick:function(){onSelect(s)},
+        style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 16px 6px 32px",cursor:"pointer",background:isSel?"rgba(59,130,246,0.08)":"transparent",borderLeft:isSel?"2px solid #3b82f6":"2px solid transparent",fontSize:13}},
+        e("span",{style:{fontWeight:isSel?700:400,color:isSel?"#3b82f6":"#d1d5db",fontFamily:"monospace"}},s),
+        q&&q.price?e("span",{style:{fontSize:11,color:sc(q.changePct||0)}},fmtPrice(q.price)):null
+      );
+    }))
+  );
+}
+function Welcome(){
+  return e("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"calc(100vh - 200px)",textAlign:"center"}},
+    e("span",{style:{fontSize:64,marginBottom:16}},"📊"),
+    e("h2",{style:{fontSize:24,fontWeight:900,color:"#f3f4f6",marginBottom:8}},"Stock Analyzer v4.0"),
+    e("p",{style:{color:"#9ca3af"}},"Select a stock from the sidebar"),
+    e("p",{style:{color:"#6b7280",fontSize:13}},"Chart + Score + Financials"),
+    e("p",{style:{color:"#4b5563",fontSize:11,marginTop:24}},"Data: Yahoo Finance (Clash)")
+  );
+}
+function Detail(p){var co=p.co,pred=p.pred,cd=p.cd,mtab=p.mtab,setMtab=p.setMtab,ftab=p.ftab,setFtab=p.setFtab,inc=p.inc,bal=p.bal,cf=p.cf,goHome=p.goHome;
+  var mTabs={};
+  mTabs["valuation"]=[["Market Cap",co.marketCap],["P/E",co.trailingPE],["Fwd P/E",co.forwardPE],["PEG",co.pegRatio],["EPS",co.eps]];
+  mTabs["profit"]=[["Margin",co.profitMargin],["Op Margin",co.operatingMargin],["ROE",co.roe],["ROA",co.roa],["Gross Profit",co.grossProfit],["Revenue",co.revenue],["EBITDA",co.ebitda]];
+  mTabs["growth"]=[["Rev Growth",co.revGrowth],["Earn Growth",co.earnGrowth]];
+  mTabs["health"]=[["Curr Ratio",co.currentRatio],["Debt/Eq",co.debtEquity],["Cash",co.totalCash],["Total Debt",co.totalDebt],["Book/Sh",co.bookValue],["Op CF",co.operatingCF],["Free CF",co.freeCF]];
+  mTabs["market"]=[["Beta",co.beta],["52W High",co.high52w],["52W Low",co.low52w]];
+  var metricKeys=Object.keys(mTabs);
+  var metricBtns=metricKeys.map(function(t){return e("button",{key:t,onClick:function(){setMtab(t)},style:{padding:"10px 20px",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",background:mtab===t?"rgba(59,130,246,0.05)":"transparent",color:mtab===t?"#3b82f6":"#6b7280",borderBottom:mtab===t?"2px solid #3b82f6":"2px solid transparent"}},t)});
+  var metricItems=(mTabs[mtab]||[]).map(function(x){return e("div",{key:x[0],style:{background:"#0B1113",border:"1px solid #1E2B31",borderRadius:8,padding:"10px 14px"}},e("p",{style:{fontSize:11,color:"#6b7280",marginBottom:4}},x[0]),e("p",{style:{fontSize:15,fontWeight:700,color:"#e5e7eb"}},x[1]||"--"))});
+  var finTabs=[{k:"income",v:"Income Statement"},{k:"balance",v:"Balance Sheet"},{k:"cashflow",v:"Cash Flow"}];
+  var finTabBtns=finTabs.map(function(x){return e("button",{key:x.k,onClick:function(){setFtab(x.k)},style:{padding:"10px 20px",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",background:ftab===x.k?"rgba(16,185,129,0.05)":"transparent",color:ftab===x.k?"#10b981":"#6b7280",borderBottom:ftab===x.k?"2px solid #10b981":"2px solid transparent"}},x.v)});
+  var finData=ftab==="income"?inc:ftab==="balance"?bal:cf;
+  return e("div",{className:"slide-in",style:{maxWidth:900}},
+    e("button",{onClick:goHome,style:{color:"#6b7280",fontSize:12,border:"none",background:"none",cursor:"pointer",marginBottom:12}},"← Back"),
+    cd&&cd.price&&e("div",{style:{marginBottom:16,display:"flex",alignItems:"baseline",gap:12}},
+      e("span",{style:{fontSize:28,fontWeight:900,color:"#f3f4f6"}},fmtPrice(cd.price)),
+      cd.prevClose&&e("span",{style:{fontSize:14,color:sc((cd.price-cd.prevClose)/cd.prevClose*100)}},
+        (cd.price-cd.prevClose>=0?"+":"")+fmtPrice(cd.price-cd.prevClose)+" ("+((cd.price-cd.prevClose)/cd.prevClose*100).toFixed(2)+"%)"),
+      e("span",{style:{fontSize:13,color:"#6b7280"}},co.symbol)
+    ),
+    cd&&cd.candles&&cd.candles.length>0&&e(KChart,{candles:cd.candles}),
+    e("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginTop:16,marginBottom:16}},
+      e(ScoreCard,{pred:pred}),e(BreakdownCard,{pred:pred}),e(SRCard,{pred:pred})
+    ),
+    e("div",{style:{background:"#111820",border:"1px solid #1E2B31",borderRadius:16,overflow:"hidden",marginBottom:16}},
+      e("div",{style:{display:"flex",borderBottom:"1px solid #1E2B31",background:"#0A0F14"}},metricBtns),
+      e("div",{style:{padding:16,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:8}},metricItems)
+    ),
+    (inc||bal||cf)&&e("div",{style:{background:"#111820",border:"1px solid #1E2B31",borderRadius:16,overflow:"hidden"}},
+      e("div",{style:{display:"flex",borderBottom:"1px solid #1E2B31",background:"#0A0F14"}},finTabBtns),
+      e("div",{style:{overflowX:"auto",maxHeight:500,overflowY:"auto"}},
+        e(FinTable,{data:finData})
+      )
+    )
+  );
+}
+function ScoreCard(p){var pred=p.pred;var sz=120,stk=8,r=(sz-stk)/2,cir=2*Math.PI*r,pct=pred.total_score/100;
+  return e("div",{style:{background:"#111820",border:"1px solid #1E2B31",borderRadius:16,padding:16,display:"flex",flexDirection:"column",alignItems:"center"}},
+    e("p",{style:{fontSize:11,color:"#6b7280",textTransform:"uppercase",letterSpacing:1,marginBottom:8}},"Score"),
+    e("div",{style:{position:"relative",width:sz,height:sz}},
+      e("svg",{width:sz,height:sz,viewBox:"0 0 "+sz+" "+sz,style:{transform:"rotate(-90deg)"}},
+        e("circle",{cx:sz/2,cy:sz/2,r:r,fill:"none",stroke:"#1E2B31",strokeWidth:stk}),
+        e("circle",{cx:sz/2,cy:sz/2,r:r,fill:"none",stroke:ratingGrad(pred.rating)[0],strokeWidth:stk,strokeLinecap:"round",strokeDasharray:cir*pct+" "+cir})
+      ),
+      e("div",{style:{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}},
+        e("span",{style:{fontSize:28,fontWeight:900,color:"#f3f4f6"}},pred.total_score),
+        e("span",{style:{fontSize:10,color:"#6b7280"}},"/100")
+      )
+    ),
+    e("span",{style:{fontSize:16,fontWeight:900,marginTop:8,background:"linear-gradient(to right,"+ratingGrad(pred.rating)[0]+","+ratingGrad(pred.rating)[1]+")",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}},pred.label_zh),
+    e("span",{style:{fontSize:12,color:"#9ca3af",marginTop:4}},"Growth: ",e("b",{style:{color:"#3b82f6"}},pred.growth_probability+"%"))
+  );
+}
+function BreakdownCard(p){var pred=p.pred;
+  return e("div",{style:{background:"#111820",border:"1px solid #1E2B31",borderRadius:16,padding:16}},
+    e("p",{style:{fontSize:11,color:"#6b7280",textTransform:"uppercase",letterSpacing:1,marginBottom:12}},"Breakdown"),
+    e("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+      pred.breakdown.map(function(b,i){return e("div",{key:i},
+        e("div",{style:{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}},
+          e("span",{style:{color:"#9ca3af"}},b.category),e("span",{style:{fontWeight:700,color:"#e5e7eb"}},b.score+"/"+b.max)
+        ),
+        e("div",{style:{height:4,background:"#0B1113",borderRadius:2,overflow:"hidden"}},
+          e("div",{style:{height:"100%",borderRadius:2,background:scoreColor(b.score),width:(b.score/b.max*100)+"%"}})
+        )
+      )})
+    )
+  );
+}
+function SRCard(p){var pred=p.pred;
+  return e("div",{style:{background:"#111820",border:"1px solid #1E2B31",borderRadius:16,padding:16,display:"flex",flexDirection:"column",gap:12}},
+    e("div",null,
+      e("p",{style:{fontSize:11,color:"#10b981",textTransform:"uppercase",letterSpacing:1,marginBottom:8}},"Strengths"),
+      pred.strengths.length===0?e("p",{style:{fontSize:11,color:"#6b7280"}},"None"):
+        pred.strengths.map(function(s,i){return e("p",{key:i,style:{fontSize:11,color:"rgba(16,185,129,0.8)",marginBottom:3}},"+ "+s)})
+    ),
+    e("div",{style:{borderTop:"1px solid #1E2B31",paddingTop:12}},
+      e("p",{style:{fontSize:11,color:"#ef4444",textTransform:"uppercase",letterSpacing:1,marginBottom:8}},"Risks"),
+      pred.risks.length===0?e("p",{style:{fontSize:11,color:"#6b7280"}},"None"):
+        pred.risks.map(function(s,i){return e("p",{key:i,style:{fontSize:11,color:"rgba(239,68,68,0.8)",marginBottom:3}},"- "+s)})
+    )
+  );
+}
+function KChart(p){var candles=p.candles;
+  var canvasRef=useRef(null);
+  useEffect(function(){
+    var canvas=canvasRef.current;if(!canvas||!candles.length)return;
+    var dpr=window.devicePixelRatio||1;
+    var rect=canvas.parentElement.getBoundingClientRect();
+    canvas.width=rect.width*dpr;canvas.height=260*dpr;
+    canvas.style.width=rect.width+"px";canvas.style.height="260px";
+    var ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
+    var W=rect.width,H=260,pad={top:20,right:20,bottom:30,left:50};
+    var pw=W-pad.left-pad.right,ph=H-pad.top-pad.bottom;
+    var closes=candles.map(function(c){return c.c}).filter(function(v){return v!=null});
+    if(!closes.length)return;
+    var min=Math.min.apply(null,closes)*0.98,max=Math.max.apply(null,closes)*1.02;
+    var yScale=function(v){return pad.top+ph-(v-min)/(max-min)*ph};
+    ctx.strokeStyle="#1a2228";ctx.lineWidth=0.5;
+    for(var i=0;i<=4;i++){var y=pad.top+ph*i/4;ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(W-pad.right,y);ctx.stroke()}
+    ctx.strokeStyle="#3b82f6";ctx.lineWidth=2;ctx.beginPath();var first=true;
+    candles.forEach(function(c,i){if(c.c==null)return;var x=pad.left+(i/(candles.length-1))*pw,ny=yScale(c.c);if(first){ctx.moveTo(x,ny);first=false}else ctx.lineTo(x,ny)});
+    ctx.stroke();
+    var grad=ctx.createLinearGradient(0,pad.top,0,H-pad.bottom);
+    grad.addColorStop(0,"rgba(59,130,246,0.3)");grad.addColorStop(1,"rgba(59,130,246,0)");
+    ctx.fillStyle=grad;ctx.lineTo(pad.left+pw,H-pad.bottom);ctx.lineTo(pad.left,H-pad.bottom);ctx.closePath();ctx.fill();
+    ctx.fillStyle="#6b7280";ctx.font="10px monospace";ctx.textAlign="right";
+    for(var i=0;i<=4;i++){var v=min+(max-min)*i/4;ctx.fillText(fmtPrice(v),pad.left-6,pad.top+ph-ph*i/4+3)}
+    ctx.textAlign="center";
+    [0,Math.floor(candles.length/2),candles.length-1].forEach(function(i){var d=new Date(candles[i].t*1000);ctx.fillText((d.getMonth()+1)+"/"+d.getDate(),pad.left+(i/(candles.length-1))*pw,H-8)});
+  },[candles]);
+  return e("canvas",{ref:canvasRef,style:{width:"100%",height:260,background:"#0B1113",borderRadius:12}});
+}
+function FinTable(p){var data=p.data;
+  if(!data||!data.length)return e("p",{style:{padding:24,color:"#6b7280",fontSize:13}},"No data");
+  var maxCols=Math.max.apply(null,data.map(function(r){return r.values.length}));
+  return e("table",{style:{width:"100%",fontSize:12,borderCollapse:"collapse"}},
+    e("thead",null,
+      e("tr",{style:{borderBottom:"1px solid #1E2B31"}},
+        e("th",{style:{textAlign:"left",padding:"10px 16px",color:"#6b7280",position:"sticky",left:0,background:"#111820",zIndex:1}},"Item"),
+        Array.from({length:maxCols},function(_,i){return e("th",{key:i,style:{textAlign:"right",padding:"10px 12px",color:"#6b7280"}},"Q"+(i+1))})
+      )
+    ),
+    e("tbody",null,
+      data.map(function(row,i){return e("tr",{key:i,style:{borderBottom:"1px solid rgba(30,43,49,0.3)"}},
+        e("td",{style:{padding:"8px 16px",color:"#9ca3af",position:"sticky",left:0,background:"#111820",whiteSpace:"nowrap"}},row.title),
+        row.values.map(function(v,j){return e("td",{key:j,style:{textAlign:"right",padding:"8px 12px",color:"#e5e7eb",fontFamily:"monospace",whiteSpace:"nowrap"}},fmtFin(v))})
+      )})
+    )
+  );
+}
+ReactDOM.render(e(App),document.getElementById("root"));
+})();
+</script>
+</body>
+</html>

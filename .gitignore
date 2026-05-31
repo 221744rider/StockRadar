@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Cache
+.stock_cache/
+*.log
+*.pid
+
+# Database (runtime)
+*.db
+
+# Secrets
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
