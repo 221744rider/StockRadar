@@ -16,7 +16,7 @@
 ```
 浏览器 (localhost:9000)  →  FastAPI 后端 (api_finance.py)
                                 │
-                          Clash 代理 (127.0.0.1:17897)
+                          HTTP 代理 (需自行配置)
                                 │
                           Yahoo Finance HTML 页面
 ```
@@ -28,7 +28,7 @@
 ### 前置条件
 
 - Python 3.7+
-- [Clash](https://github.com/Dreamacro/clash) 或其他 HTTP 代理运行在 `127.0.0.1:17897`
+- HTTP 代理（Clash / V2Ray 等），需能访问 Yahoo Finance。默认读取环境变量 `PROXY_URL`，不设置则直连
 - 安装依赖：
 
 ```bash
@@ -79,7 +79,7 @@ python api_finance.py 9000
 
 ## ⚠️ 注意事项
 
-- **Clash 必须开着**：后端通过 `127.0.0.1:17897` 代理请求 Yahoo，没开代理则全部报 502
+- **代理必须配置好**：访问 Yahoo Finance 需要代理（国内网络），请设置环境变量 `PROXY_URL` 或在 `api_finance.py` 中修改。没配代理则请求 Yahoo 会失败
 - **不要直接请求 Yahoo**：浏览器不能直接 fetch Yahoo Finance（CORS），必须走后端 `/api/proxy`
 - **Sec-Fetch Header 是关键的**：没有 `Sec-Fetch-Dest: document` 等 Header，Yahoo 返回 404
 - 本项目仅供学习参考，不构成投资建议

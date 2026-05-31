@@ -10,12 +10,13 @@ from pathlib import Path
 import math
 import requests as req_lib
 import json
+import os
 
 app = FastAPI(title="财报分析系统 v4")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-PROXY_URL = "http://127.0.0.1:17897"
-PROXY_DICT = {"http": PROXY_URL, "https": PROXY_URL}
+PROXY_URL = os.getenv("PROXY_URL", "")
+PROXY_DICT = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
 
 def sf(v, d=0.0):
     """安全转float, 处理 '27.15%', '4.54T' 等格式"""
